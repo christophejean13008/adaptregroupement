@@ -175,6 +175,11 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
     <h3>Phrases à construire</h3>
     <div class="checks" id="stepChecks"></div>
 
+    <p class="help">« École ou maison » est demandé après chaque phrase : aujourd'hui, hier et demain.</p>
+
+    <h3>Manipulation</h3>
+    <div class="checks"><label><input type="checkbox" id="tapOn"> Toucher une étiquette suffit pour la placer (sinon, l'élève doit la faire glisser)</label></div>
+
     <h3>Photos réelles</h3>
     <p class="help">Une photo de l'école ou de la maison est souvent mieux reconnue qu'un dessin.</p>
     <div class="photos" id="placePhotos"></div>
@@ -223,7 +228,7 @@ const AVC=['#F7DC5A','#A9D46F','#8FD0F2','#F2A3BE','#FCD3A1','#C9B6F2'];
 
 /* ---------- Données ---------- */
 const defaults={students:[{id:'s1',name:'Léa',level:2},{id:'s2',name:'Adam',level:1},{id:'s3',name:'Inès',level:3}],
-  steps:{auj:true,hier:true,dem:true,lieu:true,meteo:true},voice:true,dateMode:'auto',date:'',photos:{ecole:null,maison:null}};
+  steps:{auj:true,hier:true,dem:true,lieu:true,meteo:true},voice:true,tapPlace:false,dateMode:'auto',date:'',photos:{ecole:null,maison:null}};
 let D;
 try{D=JSON.parse(localStorage.getItem(KEY))}catch(e){D=null}
 if(!D||!Array.isArray(D.students)) D=JSON.parse(JSON.stringify(defaults));
@@ -332,10 +337,17 @@ function buildSteps(){
     auj:{key:'auj',parts:[Sl('temps','auj'),T(', nous sommes'),Sl('jour',d.getDay()),Sl('num',d.getDate()),Sl('mois',d.getMonth()),Sl('annee',d.getFullYear()),T('.')]},
     hier:{key:'hier',parts:[Sl('temps','hier'),T(", c'était"),Sl('jour',h.getDay()),Sl('num',h.getDate()),Sl('mois',h.getMonth()),T('.')]},
     dem:{key:'dem',parts:[Sl('temps','dem'),T(', ce sera'),Sl('jour',m.getDay()),Sl('num',m.getDate()),Sl('mois',m.getMonth()),T('.')]},
-    lieu:{key:'lieu',parts:[T("Aujourd'hui, je suis à"),Sl('lieu',null),T('.')]},
     meteo:{key:'meteo',parts:[T("Le temps aujourd'hui :"),Sl('meteo',null)]}
   };
-  return ['auj','hier','dem','lieu','meteo'].filter(k=>D.steps[k]).map(k=>all[k]);
+  const lieuTxt={auj:"Aujourd'hui, je suis à",hier:"Hier, j'étais à",dem:'Demain, je serai à'};
+  const out=[];
+  ['auj','hier','dem'].forEach(k=>{
+    if(D.steps[k])out.push(all[k]);
+    if(D.steps.lieu&&D.steps[k])out.push({key:'lieu',parts:[T(lieuTxt[k]),Sl('lieu',null),T('.')]});
+  });
+  if(D.steps.lieu&&!D.steps.auj&&!D.steps.hier&&!D.steps.dem)out.push({key:'lieu',parts:[T(lieuTxt.auj),Sl('lieu',null),T('.')]});
+  if(D.steps.meteo)out.push(all.meteo);
+  return out;
 }
 function sayStep(st){
   let out=[];
@@ -472,7 +484,10 @@ function endDrag(e,cancel){
     d.g.style.display='none';const t=cancel?null:document.elementFromPoint(e.clientX,e.clientY);d.g.remove();
     d.el.classList.remove('lifted');if(d.over)d.over.classList.remove('over');
     if(t&&t.closest('.slot.active'))attempt(d.id,d.el);
-  }else if(!cancel)attempt(d.id,d.el);
+  }else if(!cancel){
+    if(D.tapPlace)attempt(d.id,d.el);
+    else speak(card(...splitId(d.id)).say);
+  }
 }
 document.addEventListener('pointerup',e=>endDrag(e,false));
 document.addEventListener('pointercancel',e=>endDrag(e,true));
@@ -510,7 +525,7 @@ function renderSettings(){
   const PRN={temps:"Hier / Aujourd'hui / Demain",jour:'Jours',num:'Nombres 1 à 31',mois:'Mois',annee:'Années',lieu:'École / maison',meteo:'Météo'};
   $('prCats').innerHTML=Object.keys(PRN).map(k=>`<label><input type="checkbox" id="prc-${k}" data-pc="${k}" ${D.print.cats[k]?'checked':''}> ${PRN[k]}</label>`).join('');
   $('prCopies').value=String(D.print.copies);
-  $(D.dateMode==='fixe'?'dFix':'dAuto').checked=true;$('dVal').value=D.date||'';$('voiceOn').checked=!!D.voice;
+  $(D.dateMode==='fixe'?'dFix':'dAuto').checked=true;$('dVal').value=D.date||'';$('voiceOn').checked=!!D.voice;$('tapOn').checked=!!D.tapPlace;
 }
 $('stuList').addEventListener('input',e=>{const i=+e.target.dataset.i;if(e.target.classList.contains('nmIn')){D.students[i].name=e.target.value.trim()||'?';save()}});
 $('stuList').addEventListener('change',e=>{const i=+e.target.dataset.i;if(e.target.classList.contains('lvIn')){D.students[i].level=+e.target.value;save()}});
@@ -546,6 +561,7 @@ $('dAuto').onchange=()=>{D.dateMode='auto';save()};
 $('dFix').onchange=()=>{D.dateMode='fixe';save()};
 $('dVal').onchange=()=>{D.date=$('dVal').value;D.dateMode='fixe';$('dFix').checked=true;save()};
 $('voiceOn').onchange=()=>{D.voice=$('voiceOn').checked;save()};
+$('tapOn').onchange=()=>{D.tapPlace=$('tapOn').checked;save()};
 $('fileIn').onchange=()=>{
   const f=$('fileIn').files[0];if(!f||!photoTarget)return;
   const rd=new FileReader();
